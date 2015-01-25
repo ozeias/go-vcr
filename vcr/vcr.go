@@ -1,3 +1,4 @@
+// Package vcr provides the interface and implementation to record your test suite's HTTP interactions and replay them during future test runs for fast, deterministic, accurate tests.
 package vcr
 
 import (
@@ -22,6 +23,18 @@ func verifyRequest(r *http.Request, filename string) cassetteData {
 	return recordCassette(r, filename)
 }
 
+/*
+UseCassette is responsible to mock a http.Client,
+and server setup(httptest.Server) to respond with a specific
+status code and body recorded in the cassette.
+
+The client must close the server when finished with it:
+  ...
+  server, httpClient := vcr.UseCassette("vine")
+  client.HTTPClient = httpClient
+  defer server.Close()
+  // ...
+*/
 func UseCassette(filename string) (*httptest.Server, *http.Client) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cassette := verifyRequest(r, filename)
