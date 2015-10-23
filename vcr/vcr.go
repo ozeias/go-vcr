@@ -23,6 +23,22 @@ func verifyRequest(r *http.Request, filename string) cassetteData {
 	return recordCassette(r, filename)
 }
 
+// Forces all requests to be "http" (see below)
+type httpsRewrite struct {
+	transport   http.RoundTripper
+	originalReq *http.Request
+}
+
+func (r *httpsRewrite) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.originalReq = &http.Request{}
+	// copy the values
+	*r.originalReq = *req
+	*r.originalReq.URL = *req.URL
+
+	req.URL.Scheme = "http"
+	return r.transport.RoundTrip(req)
+}
+
 /*
 UseCassette is responsible to mock a http.Client,
 and server setup(httptest.Server) to respond with a specific
@@ -36,8 +52,16 @@ The client must close the server when finished with it:
   // ...
 */
 func UseCassette(filename string) (*httptest.Server, *http.Client) {
+	// Prepare for grossness.
+	// Requests are made to the httptest server over http.
+	// However, you may be actually making a https request for the cassette.
+	// Even if that request is fine and writes back a response when this completes
+	// the RoundTripper will have seen that the request was an https and attempt to decode it resulting in a "tls: oversized record received with length 24864" error.
+	// So we'll copy the original request that is actually made and force the current request to not be https.
+	var httpsTr *httpsRewrite
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cassette := verifyRequest(r, filename)
+		cassette := verifyRequest(httpsTr.originalReq, filename)
 
 		w.WriteHeader(cassette.Response.StatusCode)
 		w.Header().Set("Content-Type", cassette.Response.Header.Get("Content-Type"))
@@ -51,6 +75,7 @@ func UseCassette(filename string) (*httptest.Server, *http.Client) {
 		},
 	}
 
-	httpClient := &http.Client{Transport: tr}
+	httpsTr = &httpsRewrite{transport: tr}
+	httpClient := &http.Client{Transport: httpsTr}
 	return server, httpClient
 }
