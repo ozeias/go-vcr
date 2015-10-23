@@ -9,11 +9,8 @@ import (
 
 	"testing"
 
-	"github.com/ozeias/go-vcr/vcr"
-)
-
-const (
-	VineAPI = "http://api.vineapp.com"
+	// NOTE! Changing this when forking / merging!
+	"github.com/mrdanadams/go-vcr/vcr"
 )
 
 var (
@@ -58,8 +55,8 @@ func (c Client) getVine(id string) (vine *Vine, err error) {
 	return vine, err
 }
 
-func setup() {
-	baseURL, _ := url.Parse(VineAPI)
+func setup(apiURL string) {
+	baseURL, _ := url.Parse(apiURL)
 
 	client = &Client{
 		HTTPClient: http.DefaultClient,
@@ -68,7 +65,7 @@ func setup() {
 }
 
 func Test_UseCassette(t *testing.T) {
-	setup()
+	setup("http://api.vineapp.com")
 	vineID := "1127994498119589888"
 
 	server, httpClient := vcr.UseCassette("vine")
@@ -91,4 +88,31 @@ func Test_UseCassette(t *testing.T) {
 	if vine.Data.Records[0].Description != "Do you think I'm cute? Yes or no?" {
 		t.Errorf("Vine %d contained incorrect text. Received: %s", vineID, vine.Data.Records[0].Description)
 	}
+}
+
+func Test_UseHttpsCassette(t *testing.T) {
+	setup("https://api.vineapp.com")
+	vineID := "1127994498119589888"
+
+	server, httpClient := vcr.UseCassette("vine_https")
+	client.HTTPClient = httpClient
+	defer server.Close()
+
+	vine, err := client.getVine(vineID)
+	if err != nil {
+		t.Errorf("getVine returned error: %s", err.Error())
+	}
+
+	if !vine.Success {
+		t.Errorf("Expect response to be success and received %t", vine.Success)
+	}
+
+	if vine.Data.Records[0].Likes.Count != 498245 {
+		t.Errorf("Vine %d contained incorrect count. Received: %d", vineID, vine.Data.Records[0].Likes.Count)
+	}
+
+	if vine.Data.Records[0].Description != "Do you think I'm cute? Yes or no?" {
+		t.Errorf("Vine %d contained incorrect text. Received: %s", vineID, vine.Data.Records[0].Description)
+	}
+
 }
